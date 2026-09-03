@@ -1,0 +1,159 @@
+[
+  {
+    "case": "buzzword_padding_system_design_looks_strong",
+    "question": {
+      "id": "q-adv-buzzword", "type": "system_design",
+      "prompt": "Design a chat application backend.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "We'd use a microservices architecture with horizontal scaling, robust caching layers, and a highly available load-balanced setup. It would be cloud-native, containerized, and built for scale from day one with best practices throughout.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "long_rambling_technical_no_substance",
+    "question": {
+      "id": "q-adv-ramble", "type": "technical",
+      "prompt": "Explain how a hash map achieves average O(1) lookup.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "So that's a really interesting question, and honestly it depends on a lot of factors and how you look at it. There are many ways to think about hash maps and their performance characteristics, and different implementations handle things differently depending on the language and the use case. It's a pretty deep topic overall and there's a lot of nuance to unpack there if you really think about it carefully.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "implausible_metric_behavioral",
+    "question": {
+      "id": "q-adv-implausible", "type": "behavioral",
+      "prompt": "Tell me about a time you improved a system's performance.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I noticed our checkout API was slow, so I looked at the code for about an hour and made a small tweak to one function. After that single change, latency dropped by 150% and error rates fell by 120%, and the whole team was amazed since nobody had touched that code in years.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "very_short_but_correct_technical",
+    "question": {
+      "id": "q-adv-short-correct", "type": "technical",
+      "prompt": "Why does consistent hashing reduce remapping when nodes are added or removed, compared to modulo hashing?",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "With consistent hashing only the keys between the new node's position and its predecessor on the ring remap, roughly 1/n of all keys, whereas modulo hashing (key % n) changes almost every key's bucket the moment n changes since the divisor itself shifted. The main edge case is uneven load from a bad hash distribution, which is why real implementations add virtual nodes per physical node.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": true
+  },
+  {
+    "case": "circular_reasoning_technical",
+    "question": {
+      "id": "q-adv-circular", "type": "technical",
+      "prompt": "Why is quicksort generally faster in practice than merge sort, despite both being O(n log n) on average?",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Quicksort is faster because it's more efficient, and it's more efficient because it sorts things in a faster way that takes less time than merge sort's approach, which is comparatively slower and less optimized for speed.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "correct_mechanism_wrong_complexity_interviewer_catches_it",
+    "question": {
+      "id": "q-adv-wrongbigo", "type": "technical",
+      "prompt": "Explain how merge sort works and its time complexity.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Merge sort recursively splits the array in half until each piece has one element, then merges pairs back together in sorted order by comparing the front of each half and taking the smaller one each time. Since we split until size 1 and then merge, the time complexity is O(n) overall — the merging step is linear so the whole algorithm is linear. Edge case: an empty array or single element just returns immediately with no merging needed.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null,
+    "note": "Corrected 2026-09-03 after real-run inspection: the Interviewer directly named the exact defect ('how many levels of merging are there, and how does that affect the overall complexity?') instead of advancing a confidently wrong O(n) claim. See backend/evals/results/interview_turn_adversarial.json."
+  },
+  {
+    "case": "behavioral_team_result_claimed_as_individual",
+    "question": {
+      "id": "q-adv-fakeownership", "type": "behavioral",
+      "prompt": "Tell me about a time you drove a project to completion.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I led the effort to rebuild our onboarding flow. We decided to scrap the old wizard and go with a single-page form. We built it over about a month, we tested it with a few users, and we shipped it — signup completion went up afterward and the team was happy with the result.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "system_design_scope_stated_but_ignored",
+    "question": {
+      "id": "q-adv-scopeignored", "type": "system_design",
+      "prompt": "Design a system to serve product recommendations for an e-commerce site.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Let's assume 1 billion users and 500,000 requests per second at peak. Given that, I'd store all the product and user interaction data in a single PostgreSQL instance on one server, compute recommendations with a nightly SQL query, and serve results straight from that same database on each request.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "technical_hedges_everything",
+    "question": {
+      "id": "q-adv-hedge", "type": "technical",
+      "prompt": "What is the time complexity of inserting into a balanced binary search tree?",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "It could be O(log n), or maybe O(n) depending on how you look at it, I'm not 100% sure but I think it's probably something like log n, or possibly linear in some cases, hard to say exactly without checking.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "behavioral_internally_inconsistent_outcome",
+    "question": {
+      "id": "q-adv-inconsistent", "type": "behavioral",
+      "prompt": "Tell me about a time you delivered a project under a deadline.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I delivered the migration exactly on time as planned. We had originally scoped it for the end of March, and due to a couple of unexpected blockers we ended up wrapping it up in mid-April, but overall it felt like a smooth, on-schedule delivery that the team was proud of.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "system_design_progressive_followup_new_gap",
+    "question": {
+      "id": "q-adv-progressive", "type": "system_design",
+      "prompt": "Design a URL shortener.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "You're right, let me clarify scope: assume 500 writes/sec, 50,000 reads/sec, and redirects need to be under 100ms. I'd generate short codes with a base62 counter and store the mapping in DynamoDB.",
+    "follow_up_count": 1,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "technical_correct_logic_wrong_terminology",
+    "question": {
+      "id": "q-adv-wrongterm", "type": "technical",
+      "prompt": "Explain how breadth-first search traverses a graph.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Depth-first search visits a node, then explores all of that node's neighbors before moving further, level by level, using a queue to track which nodes to visit next in order — you dequeue a node, visit it, then enqueue its unvisited neighbors, which guarantees you find the shortest path in an unweighted graph. Edge case: a disconnected graph means some nodes are never reached from the starting node.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false
+  }
+]

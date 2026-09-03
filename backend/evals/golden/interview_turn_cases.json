@@ -23,7 +23,98 @@
     "follow_up_count": 0,
     "is_last_question": false,
     "expect_action": "advance",
+    "expect_would_survive": true
+  },
+  {
+    "case": "behavioral_followup_count_2_forces_advance",
+    "question": {
+      "id": "q-beh-cap", "type": "behavioral",
+      "prompt": "Tell me about a conflict you had with a coworker.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "It was just a disagreement about priorities, we talked it out eventually and moved on.",
+    "follow_up_count": 2,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false
+  },
+  {
+    "case": "behavioral_star_structure_no_outcome_followup",
+    "question": {
+      "id": "q-beh-nooutcome", "type": "behavioral",
+      "prompt": "Tell me about a time you had to learn a new technology quickly.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "At my last job we needed to migrate to Kubernetes and nobody on the team knew it. I spent two weekends going through the docs and tutorials, then set up a staging cluster myself and walked the team through it in a lunch-and-learn.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
     "expect_would_survive": null
+  },
+  {
+    "case": "behavioral_no_ownership_followup",
+    "question": {
+      "id": "q-beh-weowned", "type": "behavioral",
+      "prompt": "Describe a time your team missed a deadline.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "We missed the deadline because the requirements kept changing on us. Eventually we just pushed through and finished it about a week late, and the team learned to communicate better going forward.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "behavioral_last_question_completes",
+    "question": {
+      "id": "q-beh-last", "type": "behavioral",
+      "prompt": "Tell me about a time you gave difficult feedback to a peer.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "A senior engineer on my team kept merging PRs without tests, which caused two production incidents in one sprint. I pulled him aside privately, showed him the incident timeline tied to his commits, and proposed we pair on his next three PRs so testing became habit rather than a lecture. He agreed, we paired for two weeks, and his PRs have shipped with test coverage above 80% every sprint since — no regressions traced back to his code in the following quarter.",
+    "follow_up_count": 0,
+    "is_last_question": true,
+    "expect_action": "complete",
+    "expect_would_survive": true
+  },
+  {
+    "case": "behavioral_weak_after_two_followups",
+    "question": {
+      "id": "q-beh-weak2", "type": "behavioral",
+      "prompt": "Tell me about a mistake you made and how you handled it.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I pushed some bad code once, we fixed it, and I was more careful after that.",
+    "follow_up_count": 2,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false
+  },
+  {
+    "case": "behavioral_short_answer_followup",
+    "question": {
+      "id": "q-beh-short", "type": "behavioral",
+      "prompt": "Tell me about a time you disagreed with a manager's decision.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I disagreed once but ended up going along with it.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "behavioral_exceptional_answer_advances",
+    "question": {
+      "id": "q-beh-exceptional", "type": "behavioral",
+      "prompt": "Tell me about a time you influenced a decision without formal authority.",
+      "targetDifficulty": 4, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Our platform team wanted to adopt GraphQL org-wide; I was a mid-level engineer with no authority over the decision but owned the REST gateway that would be replaced. I built a two-week proof-of-concept that ran GraphQL alongside our existing REST layer for one internal service, measured a 40% drop in over-fetched payload size and a 15% latency improvement, and presented the numbers with a migration-cost estimate to the staff engineers. They adopted a phased rollout based on my proposal instead of the big-bang rewrite that was originally planned, which avoided an estimated 3 months of parallel-maintenance risk. Looking back, I'd have looped in the mobile team earlier since their client update ended up being the long pole in the actual rollout.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": true
   },
   {
     "case": "vague_technical_evaluated_as_fail",
@@ -50,5 +141,163 @@
     "is_last_question": false,
     "expect_action": "advance",
     "expect_would_survive": true
+  },
+  {
+    "case": "technical_correct_no_edgecases_followup",
+    "question": {
+      "id": "q-tech-noedge", "type": "technical",
+      "prompt": "How would you implement an LRU cache?",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I'd use a hash map for O(1) lookup paired with a doubly linked list to track recency. On access, move the node to the front. On insert when full, evict the tail. Both operations are O(1).",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "technical_last_question_strong_completes",
+    "question": {
+      "id": "q-tech-last", "type": "technical",
+      "prompt": "How does a hash table handle collisions?",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Two main strategies: separate chaining, where each bucket holds a linked list or small array of entries that hash to it, and open addressing, where a colliding key probes forward (linear, quadratic, or via double hashing) to find the next free slot. Chaining degrades gracefully under high load factor but costs extra pointer memory; open addressing is more cache-friendly but requires careful handling of deletions — you have to tombstone rather than null out a slot, or probing breaks for later lookups. Average O(1) for both if the hash function distributes well and load factor is kept below ~0.7.",
+    "follow_up_count": 0,
+    "is_last_question": true,
+    "expect_action": "complete",
+    "expect_would_survive": true
+  },
+  {
+    "case": "technical_confidently_wrong_interviewer_catches_it",
+    "question": {
+      "id": "q-tech-wrong", "type": "technical",
+      "prompt": "What is the time complexity of binary search, and why?",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Binary search is O(log n) because it splits the array into two halves and only searches one, and it works even on unsorted arrays as long as you know the target is in there somewhere. The edge case is when the array is empty, which just returns not found immediately, and when there are duplicate values it always finds the last occurrence.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null,
+    "note": "Corrected 2026-09-03 after real-run inspection: the Interviewer directly challenged the sorted/unsorted contradiction ('what property does the array actually need to have for binary search to work correctly, and why?') instead of advancing. That's more rigorous than the original label assumed, not a bug — see backend/evals/results/interview_turn_baseline.json for the run that surfaced this."
+  },
+  {
+    "case": "technical_after_two_followups_still_vague",
+    "question": {
+      "id": "q-tech-cap", "type": "technical",
+      "prompt": "Explain how a B-tree keeps itself balanced.",
+      "targetDifficulty": 4, "weightedFromWeakness": false
+    },
+    "candidate_answer": "It splits nodes when they get too full and merges them when they get too empty, so it stays balanced.",
+    "follow_up_count": 2,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false
+  },
+  {
+    "case": "technical_short_answer_followup",
+    "question": {
+      "id": "q-tech-short", "type": "technical",
+      "prompt": "What's the difference between a process and a thread?",
+      "targetDifficulty": 1, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Threads share memory, processes don't really.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "system_design_vague_jumps_to_components_followup",
+    "question": {
+      "id": "q-sd-vague", "type": "system_design",
+      "prompt": "Design a URL shortener.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I'd have a load balancer, a few app servers, and a database to store the short code to long URL mapping. Pretty standard setup.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "system_design_strong_advances",
+    "question": {
+      "id": "q-sd-strong", "type": "system_design",
+      "prompt": "Design a URL shortener.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "First I'd clarify scope: expected writes/sec, whether custom aliases are needed, and redirect latency SLA — let's assume 1000 writes/sec, 100k reads/sec, and sub-100ms redirects. I'd generate short codes with a base62 counter sharded by worker ID to avoid coordination, store the mapping in a key-value store like DynamoDB for O(1) lookups, and put a CDN/edge cache in front since reads dominate writes 100:1. The main tradeoff is counter-based IDs are guessable and sequential, which leaks volume information, versus hash-based IDs which need a collision-retry loop; I'd pick counter-based here since this isn't a security-sensitive domain. At scale the redirect service is the bottleneck, not the write path, so I'd scale that horizontally behind the CDN and keep write throughput as the cheap side of the system.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": true
+  },
+  {
+    "case": "system_design_no_tradeoffs_followup",
+    "question": {
+      "id": "q-sd-notradeoff", "type": "system_design",
+      "prompt": "Design a rate limiter for a public API.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "We're assuming per-API-key limits at 100 requests/minute. I'd use a token bucket per key stored in Redis, refilling at a fixed rate, and reject requests once the bucket is empty. At scale I'd shard Redis by key hash so no single node is a bottleneck.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
+  },
+  {
+    "case": "system_design_last_question_strong_completes",
+    "question": {
+      "id": "q-sd-last", "type": "system_design",
+      "prompt": "Design a notification system that supports push, email, and SMS.",
+      "targetDifficulty": 4, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Scope: assume 10M users, notifications triggered by app events, delivery within 30s for push and a few minutes for email/SMS is acceptable. I'd put a queue (Kafka or SQS) in front so producers don't block on delivery, with a dispatcher per channel consuming from its own topic so a slow SMS provider doesn't back up push. Each channel-specific worker calls the relevant third-party provider (APNs/FCM, SES, Twilio) with retry-with-backoff and a dead-letter queue for permanent failures. The key tradeoff is at-least-once delivery: providers can dedupe on our side with an idempotency key, but we accept occasional duplicate notifications rather than risk dropping one, since a missed notification is worse for this product than a duplicate. Bottleneck at scale is the SMS provider's own rate limit, which we'd have to shard across multiple provider accounts or providers entirely.",
+    "follow_up_count": 0,
+    "is_last_question": true,
+    "expect_action": "complete",
+    "expect_would_survive": true
+  },
+  {
+    "case": "system_design_borderline_correctly_fails_depth",
+    "question": {
+      "id": "q-sd-borderline", "type": "system_design",
+      "prompt": "Design a simple key-value store.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "Assuming single-region and read-heavy traffic, I'd shard keys across nodes by consistent hashing so we can add nodes without a full rehash. Each shard is a single leader with async replicas for read scaling. Tradeoff is async replication means replicas can serve slightly stale reads after a write, which I'd accept here since this isn't a financial system. At higher scale the leader for a hot key becomes the bottleneck, and I'd handle that with request coalescing.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false,
+    "note": "Corrected 2026-09-03 after real-run inspection: Evaluator scored depth 2.5/5 with specific reasoning (never addresses persistence, eviction policy, or failure/recovery) and correctly refused survive under the all-scores->=3 rule. Original label was too generous, not a rubric bug. KNOWN BOUNDARY CASE: a 5-rep spot-check on this case alone showed depth scored 2.5 in 4/5 runs and 3.0 in 1/5, flipping the verdict ~20% of the time — this label matches the 4/5 majority. A single-run eval pass may show this case as a mismatch; that's expected LLM-judge variance on a genuinely borderline answer, not a regression. Would need multi-rep majority-vote grading to fully stabilize."
+  },
+  {
+    "case": "system_design_after_two_followups_shallow",
+    "question": {
+      "id": "q-sd-cap", "type": "system_design",
+      "prompt": "Design a web crawler.",
+      "targetDifficulty": 3, "weightedFromWeakness": false
+    },
+    "candidate_answer": "You'd have workers that fetch pages and put new links into a queue for other workers to pick up.",
+    "follow_up_count": 2,
+    "is_last_question": false,
+    "expect_action": "advance",
+    "expect_would_survive": false
+  },
+  {
+    "case": "system_design_short_answer_followup",
+    "question": {
+      "id": "q-sd-short", "type": "system_design",
+      "prompt": "Design a parking garage system.",
+      "targetDifficulty": 2, "weightedFromWeakness": false
+    },
+    "candidate_answer": "I'd just track which spots are free in a database and update it as cars come and go.",
+    "follow_up_count": 0,
+    "is_last_question": false,
+    "expect_action": "follow_up",
+    "expect_would_survive": null
   }
 ]

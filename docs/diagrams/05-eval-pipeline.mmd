@@ -1,0 +1,45 @@
+flowchart TD
+    subgraph Input["Golden case sets (backend/evals/golden/)"]
+        G1["interview_turn_cases.json<br/>23 cases — regression set<br/>behavioral / technical / system_design<br/>vague, strong, borderline, follow-up-cap, last-question"]
+        G2["interview_turn_adversarial_cases.json<br/>12 cases — adversarial stress-test<br/>buzzword padding, length bias, hedging,<br/>subtle wrong Big-O, terminology swap,<br/>implausible metrics, ownership decoys"]
+    end
+
+    subgraph Runner["backend/evals/run_accuracy_eval.py"]
+        R1["Load cases"]
+        R2["Call the REAL InterviewerAgent.run_turn()<br/>real prompt, real Bedrock (Sonnet 4.6)"]
+        R3{"expect_would_survive<br/>is not null?"}
+        R4["Call the REAL EvaluatorAgent.run()<br/>real prompt, real Bedrock (Sonnet 4.6)"]
+        R5["Grade: exact-match actual vs expected<br/>action + wouldSurviveRealInterview"]
+        R6["Track usage per call<br/>(tokens in/out via wrapped client)"]
+    end
+
+    subgraph Output["Results"]
+        O1["backend/evals/results/interview_turn_*.json<br/>per-case pass/fail + accuracy % + est. cost"]
+    end
+
+    G1 --> R1
+    G2 --> R1
+    R1 --> R2
+    R2 --> R3
+    R3 -- yes --> R4
+    R3 -- no --> R5
+    R4 --> R5
+    R2 -.usage.-> R6
+    R4 -.usage.-> R6
+    R5 --> O1
+    R6 --> O1
+
+    O1 --> D{"Any case failed?"}
+    D -- no --> DONE["Report accuracy — done"]
+    D -- yes --> INSPECT["Re-call the agent on just that case,<br/>read the actual reasoning /<br/>follow_up_prompt / survivalReasoning<br/>(not just pass/fail)"]
+    INSPECT --> Q{"Was the model<br/>actually right?"}
+    Q -- "yes — my golden<br/>label was wrong" --> FIXLABEL["Correct the label in the<br/>golden JSON, note why + evidence"]
+    Q -- "no — real prompt<br/>defect found" --> FIXPROMPT["Edit backend/prompts/*.md,<br/>then re-run for a real before/after"]
+    Q -- "flips between runs<br/>on identical input" --> REPCHECK["Re-run that one case N times,<br/>report the split (e.g. 4/5 vs 1/5)<br/>— label = majority vote, documented<br/>as a known boundary case, not 'fixed'"]
+    FIXLABEL --> R1
+    FIXPROMPT --> R1
+    REPCHECK --> DONE
+
+    style DONE fill:#00D4AA,color:#0A0A0C
+    style FIXPROMPT fill:#FF6B3D,color:#0A0A0C
+    style REPCHECK fill:#4A7CFF,color:#ffffff
