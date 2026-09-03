@@ -6,16 +6,18 @@ AI mock interview platform with a real-time video avatar interviewer, a five-age
 
 ## Why this exists
 
-Most AI mock interviewers forget you the moment the session ends, and they validate whatever you say instead of pushing back. This project is built around two bets that most competitors in this space (Revarta, OphyAI, Final Round AI, HireMindPro, and others) don't make:
+I was using Claude's and ChatGPT's voice mode to practice for interviews. No matter what I said, it kept telling me "that's great," "you're acing it." It felt good in the moment, but it was building a false sense of confidence — the kind that falls apart the second an actual interviewer pushes back on a vague answer instead of validating it.
+
+That gap is the whole reason this exists. Practice that only ever agrees with you isn't practice, it's a confidence trick. So instead of another voice mode, I set out to build something closer to a real interviewer: a video avatar, real voice, and infrastructure to back it — and after looking at what the existing competitors in this space (Revarta, OphyAI, Final Round AI, HireMindPro, and others) actually shipped, I built around two things almost none of them do:
 
 1. **It remembers.** A dedicated Memory Agent aggregates weaknesses across every session and feeds them straight back into the next session's question plan — not a score trend line, an actual change in what gets asked next.
-2. **It pushes back.** The Interviewer Agent is instructed to never accept a vague answer, to probe with "why" and "how," and is explicitly banned from saying "great answer" unless the response actually meets the rubric.
+2. **It pushes back.** The Interviewer Agent is instructed to never accept a vague answer, to probe with "why" and "how," and is explicitly banned from saying "great answer" unless the response actually meets the rubric — the exact behavior I wished the voice-mode tools I was using had, instead of cheerleading me into a false sense of readiness.
 
 Every evaluated answer also gets a `wouldSurviveRealInterview` verdict with reasoning — a sharper, more honest signal than a 1–10 score, and the thing this product leads with instead of a numeric grade.
 
 ## Architecture
 
-A five-agent pipeline orchestrated with LangGraph, each agent with exactly one job:
+The avatar and voice are what make a session feel real, but they're not the point — the reasoning underneath them is. That's a five-agent pipeline orchestrated with LangGraph, each agent with exactly one job:
 
 | Agent | Responsibility |
 |---|---|
