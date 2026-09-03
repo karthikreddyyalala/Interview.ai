@@ -31,6 +31,17 @@ A sixth agent, **Coach**, reworks a candidate's own weak answer into a model ans
 
 Every agent's output is validated against a Pydantic schema before it's passed to the next stage; no raw LLM text crosses an agent boundary.
 
+## Engineering depth
+
+Things here that go beyond a demo wrapper around an LLM call:
+
+- **Structured output is enforced, not hoped for.** Every agent call routes through a single choke point (`backend/llm/client.py`) that parses and validates the response against a Pydantic schema, with retry-on-parse-failure and retry-on-schema-failure — not a bare try/except. No raw LLM text is ever passed between agents or to the frontend.
+- **Prompts are constrained to testable behavior, not vibes.** The Interviewer's prompt bans specific validating phrases outright ("great answer," "interesting"), defines concrete vagueness criteria per question type, and caps a progressive follow-up arc — STAR-based for behavioral, "can we do better" for technical, scope-then-tradeoffs for system design.
+- **The pipeline is tested at three separate layers**: per-agent unit tests (a fake LLM verifying plumbing), LangGraph-level tests (verifying state transitions with scripted decisions), and an end-to-end suite that asserts on the *actual prompt text* the Planner receives after a prior session — proving the cross-session memory loop changes what gets asked, not just that the code paths exist.
+- **A gated eval harness with golden datasets** (`backend/evals/`) regression-tests judgment quality — vague-vs-strong answers, two-session memory aggregation — skipped by default since real runs cost Bedrock tokens, triggered explicitly via `INTERVIEWAI_RUN_LLM_EVALS=1`.
+- **Deliberate cost/latency tiering, not "call the biggest model everywhere."** Haiku handles structured extraction (Intake, Memory); Sonnet is reserved for the agents that actually carry the product's judgment (Planner, Interviewer, Evaluator, Coach) — enforced by a test asserting Opus is never a default anywhere in config.
+- **Every optional integration degrades gracefully.** Tavus, auth, and the persistence backend are all feature-flagged; the app is fully demoable with zero AWS credentials via a local mock engine, and falls back to a stylized avatar if no Tavus key is configured — the video layer was built to never block the agent logic underneath it.
+
 ## Stack
 
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, Zustand, React Router
