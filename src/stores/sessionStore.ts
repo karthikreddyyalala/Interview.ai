@@ -59,6 +59,7 @@ interface SessionState {
     useVideo: boolean;
   }) => Promise<void>;
   submitAnswer: (text: string) => Promise<void>;
+  retryFinalize: () => Promise<void>;
   clearRestored: () => void;
   clearTurnError: () => void;
   reset: () => void;
@@ -110,7 +111,33 @@ function hasMemory(m: MemoryProfile | null): boolean {
 
 export const useSessionStore = create<SessionState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // Shared by the initial finalize attempt (end of submitAnswer) and
+      // retryFinalize: calls the backend, and on failure — a real, reachable
+      // outcome (retry-budget-exhausted memory-profile conflicts, other
+      // transient agent errors) — surfaces it the same way turn-submission
+      // failures already are (turnError + a way to retry) instead of leaving
+      // the session stuck on "wrapping" with no feedback.
+      const runFinalize = async () => {
+        const state = get();
+        try {
+          const updated = await api.finalizeSession({
+            candidateId: getCandidateId(),
+            evaluations: state.evaluations,
+            sessionId: state.plan!.sessionId,
+            mode: state.mode,
+            level: state.level,
+            questions: state.plan!.questions,
+          });
+          set({ status: "complete", updatedMemory: updated, turnError: null });
+        } catch (e) {
+          set({
+            turnError: e instanceof Error ? e.message : "Request failed — please try again.",
+          });
+        }
+      };
+
+      return {
       status: "idle",
       role: "sde",
       mode: "full",
@@ -273,18 +300,18 @@ export const useSessionStore = create<SessionState>()(
             text: "That's everything I wanted to cover. Give me a moment to pull together your evaluation.",
             questionId: question.id,
           };
-          set((s) => ({ status: "wrapping", messages: [...s.messages, closing] }));
-          // Backend persists the aggregated memory (DynamoDB in real mode,
-          // localStorage in mock mode) — it's the source of truth now.
-          const updated = await api.finalizeSession({
-            candidateId: getCandidateId(),
+          set((s) => ({
+            status: "wrapping",
+            messages: [...s.messages, closing],
             evaluations: evals,
-            sessionId: state.plan!.sessionId,
-            mode: state.mode,
-            level: state.level,
-            questions: state.plan!.questions,
-          });
-          set({ status: "complete", evaluations: evals, updatedMemory: updated });
+          }));
+          // Backend persists the aggregated memory (DynamoDB in real mode,
+          // localStorage in mock mode) — it's the source of truth now. On
+          // failure (a real, reachable 503 from a memory-profile locking
+          // conflict, or other transient errors) runFinalize surfaces
+          // turnError and leaves status at "wrapping" so retryFinalize can
+          // be called again, instead of hanging forever with no feedback.
+          await runFinalize();
           return;
         }
 
@@ -310,6 +337,12 @@ export const useSessionStore = create<SessionState>()(
         }));
       },
 
+      retryFinalize: async () => {
+        if (get().status !== "wrapping") return;
+        set({ turnError: null });
+        await runFinalize();
+      },
+
       clearRestored: () => set({ justRestored: false }),
       clearTurnError: () => set({ turnError: null }),
 
@@ -326,7 +359,8 @@ export const useSessionStore = create<SessionState>()(
           updatedMemory: null,
           justRestored: false,
         }),
-    }),
+      };
+    },
     {
       name: "crucible.session.v1",
       storage: createJSONStorage(() => localStorage),

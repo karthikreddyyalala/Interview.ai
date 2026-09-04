@@ -37,6 +37,7 @@ export function Interview() {
   const clearRestored = useSessionStore((s) => s.clearRestored);
   const turnError = useSessionStore((s) => s.turnError);
   const clearTurnError = useSessionStore((s) => s.clearTurnError);
+  const retryFinalize = useSessionStore((s) => s.retryFinalize);
 
   const [draft, setDraft] = useState("");
   const [lastDraft, setLastDraft] = useState("");
@@ -319,7 +320,14 @@ export function Interview() {
                 <span className="font-mono text-[11px] tracking-wide text-fail">{turnError}</span>
               </div>
               <button
-                onClick={() => { clearTurnError(); }}
+                onClick={() => {
+                  // Finalize failures (e.g. a 503 from the memory-profile
+                  // write) have nothing left to resubmit — retry the
+                  // finalize call itself. Turn failures just clear the
+                  // banner so the restored draft can be resent.
+                  if (status === "wrapping") retryFinalize();
+                  else clearTurnError();
+                }}
                 className="flex items-center gap-1.5 font-mono text-[11px] text-fog transition-colors hover:text-chalk"
               >
                 <ArrowClockwise size={13} weight="bold" />
@@ -413,6 +421,8 @@ export function Interview() {
                   ? "Listening…"
                   : thinking
                   ? "Interviewer is thinking…"
+                  : status === "wrapping" && turnError
+                  ? "Couldn't pull your results — tap retry above."
                   : status === "wrapping" || status === "complete"
                   ? "Session complete — pulling your results…"
                   : "Type or speak your answer — be specific."

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useSessionStore } from "./sessionStore";
 import type { TurnResult } from "@/lib/api";
-import type { QuestionPlan, InterviewDecision } from "@/types/contracts";
+import type { AnswerEvaluation, QuestionPlan, InterviewDecision, MemoryProfile } from "@/types/contracts";
 
 // ---- Mocks ----------------------------------------------------------------
 
@@ -50,6 +50,29 @@ const ADVANCE_DECISION: InterviewDecision = {
   action: "advance",
   followUpPrompt: null,
   currentQuestionId: "q1",
+};
+
+const COMPLETE_DECISION: InterviewDecision = {
+  action: "complete",
+  followUpPrompt: null,
+  currentQuestionId: "q2",
+};
+
+const MOCK_EVALUATION: AnswerEvaluation = {
+  questionId: "q2",
+  transcript: "My final answer.",
+  rubricScores: { structure: 4, specificity: 3, impact: 4, ownership: 3 },
+  weaknessTags: [],
+  followUpCount: 0,
+  wouldSurviveRealInterview: true,
+  survivalReasoning: "Concrete example with measurable outcome.",
+};
+
+const MOCK_MEMORY: MemoryProfile = {
+  candidateId: "test-candidate-id",
+  recurringWeaknesses: [],
+  improvementTrend: [{ sessionDate: "2026-09-03", avgScore: 3.5 }],
+  strongAreas: ["debugging"],
 };
 
 function seedLiveSession() {
@@ -228,6 +251,133 @@ describe("sessionStore — turnError", () => {
       expect(useSessionStore.getState().currentIdx).toBe(1);
       expect(useSessionStore.getState().status).toBe("live");
     });
+  });
+
+  describe("submitAnswer — finalize failure (session/finalize 503, etc.)", () => {
+    function seedFinalQuestionSession() {
+      useSessionStore.setState({
+        status: "live",
+        role: "sde",
+        mode: "full",
+        level: "mid",
+        profile: null,
+        plan: MOCK_PLAN,
+        currentIdx: 1, // last question — the decision below completes the session
+        followUpCount: 0,
+        messages: [],
+        evaluations: [],
+        priorMemory: null,
+        updatedMemory: null,
+        justRestored: false,
+        turnError: null,
+      });
+    }
+
+    it("surfaces a retryable error instead of leaving the session silently stuck", async () => {
+      seedFinalQuestionSession();
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.submitAnswer).mockResolvedValueOnce({
+        decision: COMPLETE_DECISION,
+        evaluation: MOCK_EVALUATION,
+      });
+      vi.mocked(api.finalizeSession).mockRejectedValueOnce(new Error("Request failed (503)"));
+
+      // The bug: today nothing catches this rejection, so it either propagates
+      // as an unhandled rejection out of submitAnswer, or (once fixed) resolves
+      // cleanly with the failure surfaced in state instead.
+      await expect(
+        useSessionStore.getState().submitAnswer("My final answer.")
+      ).resolves.toBeUndefined();
+
+      const s = useSessionStore.getState();
+      // Never silently pretend success.
+      expect(s.status).not.toBe("complete");
+      // The failure must be visible to the user, not swallowed.
+      expect(s.turnError).toBe("Request failed (503)");
+      // No memory update should be recorded from a failed finalize.
+      expect(s.updatedMemory).toBeNull();
+    });
+
+    it("falls back to a generic message when finalizeSession rejects with a non-Error", async () => {
+      seedFinalQuestionSession();
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.submitAnswer).mockResolvedValueOnce({
+        decision: COMPLETE_DECISION,
+        evaluation: MOCK_EVALUATION,
+      });
+      vi.mocked(api.finalizeSession).mockRejectedValueOnce("just a string error");
+
+      await useSessionStore.getState().submitAnswer("My final answer.");
+
+      expect(useSessionStore.getState().turnError).toBe(
+        "Request failed — please try again."
+      );
+    });
+  });
+
+  describe("retryFinalize", () => {
+    function seedWrappingWithError() {
+      useSessionStore.setState({
+        status: "wrapping",
+        role: "sde",
+        mode: "full",
+        level: "mid",
+        profile: null,
+        plan: MOCK_PLAN,
+        currentIdx: 1,
+        followUpCount: 0,
+        messages: [],
+        evaluations: [MOCK_EVALUATION],
+        priorMemory: null,
+        updatedMemory: null,
+        justRestored: false,
+        turnError: "Request failed (503)",
+      });
+    }
+
+    it("retries finalizeSession and completes the session on success", async () => {
+      seedWrappingWithError();
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.finalizeSession).mockResolvedValueOnce(MOCK_MEMORY);
+
+      await useSessionStore.getState().retryFinalize();
+
+      const s = useSessionStore.getState();
+      expect(s.status).toBe("complete");
+      expect(s.turnError).toBeNull();
+      expect(s.updatedMemory).toEqual(MOCK_MEMORY);
+    });
+
+    it("surfaces the error again if the retry also fails", async () => {
+      seedWrappingWithError();
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.finalizeSession).mockRejectedValueOnce(new Error("still down"));
+
+      await useSessionStore.getState().retryFinalize();
+
+      const s = useSessionStore.getState();
+      expect(s.status).not.toBe("complete");
+      expect(s.turnError).toBe("still down");
+    });
+
+    it("is a no-op when not in the wrapping state", async () => {
+      seedFinalQuestionSession(); // status: "live"
+      const { api } = await import("@/lib/api");
+
+      await useSessionStore.getState().retryFinalize();
+
+      expect(api.finalizeSession).not.toHaveBeenCalled();
+    });
+
+    function seedFinalQuestionSession() {
+      useSessionStore.setState({
+        status: "live",
+        plan: MOCK_PLAN,
+        currentIdx: 1,
+        evaluations: [],
+        turnError: null,
+      });
+    }
   });
 
   describe("warm-up exchange", () => {
