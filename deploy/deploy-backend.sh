@@ -4,6 +4,13 @@
 # Lambda (python3.12, DynamoDB persistence), caps concurrency, and exposes a
 # public HTTPS Function URL. Idempotent — safe to re-run.
 #
+# update-function-configuration REPLACES the Lambda's whole environment, not
+# merges it — every var the function needs (including Cognito auth, below)
+# must be re-supplied on every run, or a routine redeploy will silently wipe
+# it. Set CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID (and
+# optionally CRUCIBLE_AUTH_REQUIRED / CRUCIBLE_COGNITO_REGION) in your shell
+# before running this if the deployment requires authenticated access.
+#
 # Prereq: deploy/setup-iam.sh has been run, and deploy/build/crucible-api.zip
 # exists (run deploy/build-lambda.sh first).
 #
@@ -32,6 +39,23 @@ if [ -n "${CRUCIBLE_TAVUS_API_KEY:-}" ]; then
     ENV_JSON="${ENV_JSON},\"INTERVIEWAI_TAVUS_PERSONA_ID\":\"${CRUCIBLE_TAVUS_PERSONA_ID}\""
   fi
   echo "==> Tavus avatar: ENABLED (key provided)"
+fi
+
+# Cognito auth is optional here the same way Tavus is: set
+# CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID in your OWN
+# shell (never commit these) to require a valid Cognito ID token on every
+# /api call. CRUCIBLE_AUTH_REQUIRED defaults to "true" once a pool is
+# provided; CRUCIBLE_COGNITO_REGION defaults to the deploy region. Without a
+# pool id, update-function-configuration REPLACES the whole environment, so
+# omitting these here would silently disable auth on a live deployment.
+if [ -n "${CRUCIBLE_COGNITO_USER_POOL_ID:-}" ] && [ -n "${CRUCIBLE_COGNITO_CLIENT_ID:-}" ]; then
+  ENV_JSON="${ENV_JSON},\"INTERVIEWAI_AUTH_REQUIRED\":\"${CRUCIBLE_AUTH_REQUIRED:-true}\""
+  ENV_JSON="${ENV_JSON},\"INTERVIEWAI_COGNITO_REGION\":\"${CRUCIBLE_COGNITO_REGION:-$REGION}\""
+  ENV_JSON="${ENV_JSON},\"INTERVIEWAI_COGNITO_USER_POOL_ID\":\"${CRUCIBLE_COGNITO_USER_POOL_ID}\""
+  ENV_JSON="${ENV_JSON},\"INTERVIEWAI_COGNITO_CLIENT_ID\":\"${CRUCIBLE_COGNITO_CLIENT_ID}\""
+  echo "==> Cognito auth: ENABLED (user pool + client id provided)"
+else
+  echo "==> Cognito auth: DISABLED — set CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID to require auth"
 fi
 ENV_JSON="${ENV_JSON}}}"
 

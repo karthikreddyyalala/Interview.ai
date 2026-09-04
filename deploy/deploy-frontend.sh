@@ -19,7 +19,20 @@ API_BASE="${CRUCIBLE_API_BASE:?Set CRUCIBLE_API_BASE to the Lambda Function URL}
 
 echo "==> Building frontend against ${API_BASE}"
 cd "$ROOT"
-VITE_USE_MOCK=false VITE_API_BASE="$API_BASE" npm run build >/dev/null
+# Cognito is optional the same way it is on the backend: set
+# CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID in your OWN
+# shell (never commit these) so the built bundle can sign users in. Leaving
+# them unset silently ships a build with login disabled (AUTH_CONFIGURED
+# is false in src/lib/auth.ts), so warn rather than fail silently.
+if [ -n "${CRUCIBLE_COGNITO_USER_POOL_ID:-}" ] && [ -n "${CRUCIBLE_COGNITO_CLIENT_ID:-}" ]; then
+  echo "==> Cognito auth: ENABLED (user pool + client id provided)"
+else
+  echo "==> Cognito auth: DISABLED — set CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID to enable login"
+fi
+VITE_USE_MOCK=false VITE_API_BASE="$API_BASE" \
+  VITE_COGNITO_USER_POOL_ID="${CRUCIBLE_COGNITO_USER_POOL_ID:-}" \
+  VITE_COGNITO_CLIENT_ID="${CRUCIBLE_COGNITO_CLIENT_ID:-}" \
+  npm run build >/dev/null
 echo "    built dist/"
 
 echo "==> Private S3 bucket ${BUCKET}"
