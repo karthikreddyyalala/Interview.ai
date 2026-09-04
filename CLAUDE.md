@@ -81,6 +81,7 @@ interface MemoryProfile {
 - Use conventional commits: feat:, fix:, refactor:, chore:
 - Commit author: Karthik
 - Example: `feat: add memory agent weakness aggregation`
+- This repo's filesystem is case-insensitive (`core.ignorecase=true`). Before deleting a file believed to be a duplicate of another by case alone, verify with `git ls-files | grep -i <name>` — `ls` or a visual diff can't be trusted to prove two files exist, since a case-differing path is never a second file here.
 
 ## Code style
 - TypeScript strict mode, no `any` types ever
