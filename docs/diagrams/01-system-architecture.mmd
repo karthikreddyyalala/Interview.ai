@@ -1,10 +1,13 @@
-%% Crucible — DEPLOYED architecture (as of 2026-06-28).
-%% Solid = built & live.  Dotted = planned / optional upgrade.
+%% Crucible — DEPLOYED architecture (as of 2026-09-04).
+%% Solid line  = built & live, always on the request path.
+%% Dotted line = planned / not yet built.
+%% Dashed subgraph border = built & live in production, but config-gated at
+%%   runtime (degrades gracefully to a fallback if the env vars are unset).
 flowchart TB
     subgraph Client["Frontend — React + TS + Vite (SPA)"]
         UI[Interview UI / Setup / Results]
         VOICE[Browser voice: Web Speech STT + TTS]
-        AVA[Stylized interviewer avatar]
+        AVA[Interviewer avatar UI<br/>Tavus live video, else stylized fallback]
     end
 
     subgraph CDN["AWS edge — HTTPS"]
@@ -12,12 +15,16 @@ flowchart TB
         S3F[S3 — static site bucket]
     end
 
+    subgraph Identity["Amazon Cognito"]
+        AUTH[User pool: crucible-users<br/>app client: crucible-web]
+    end
+
     subgraph API["Public API"]
         APIGW[API Gateway — HTTP API]
     end
 
     subgraph Compute["AWS Lambda — FastAPI via Mangum (python3.12)"]
-        ROUTES[REST routes: start / turn / finalize / memory]
+        ROUTES[REST routes: start / turn / finalize / memory / avatar]
         subgraph Graph["LangGraph — 5-agent pipeline"]
             IN[Intake Agent]
             PL[Planner Agent]
@@ -42,14 +49,20 @@ flowchart TB
         CONC[Lambda concurrency cap — account limit 10]
     end
 
-    %% planned / optional
-    PROV[Premium voice/avatar: Deepgram · ElevenLabs · Tavus/D-ID]
-    AUTH[Auth: Cognito]
+    subgraph AvatarSvc["Tavus avatar service — optional, config-gated"]
+        TAVUS[Tavus API<br/>backend/llm/tavus.py]
+        DAILY[Daily.co WebRTC<br/>frontend: useTavus.ts]
+    end
+
+    %% planned / not yet built
+    PROV[Premium voice upgrade: Deepgram · ElevenLabs]
 
     UI --> CF
     CF --> S3F
-    UI -->|fetch /api| APIGW
+    UI -->|sign up / sign in| AUTH
+    UI -->|fetch /api<br/>Bearer ID token| APIGW
     APIGW --> ROUTES
+    ROUTES -->|verify ID token via JWKS| AUTH
     ROUTES --> IN
     IN --> PL
     PL -. reads .-> MEM
@@ -63,6 +76,8 @@ flowchart TB
     MEM --> DDB
     ROUTES --> DDB
     UI --> LSTORE
+    ROUTES -->|create / end conversation| TAVUS
+    AVA <-->|join room, live video + audio| DAILY
     VOICE -. upgrade .-> PROV
-    AVA -. upgrade .-> PROV
-    UI -. planned .-> AUTH
+
+    style AvatarSvc stroke-dasharray: 5 5
