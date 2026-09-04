@@ -26,6 +26,13 @@ ZIP="$(cd "$(dirname "$0")/.." && pwd)/deploy/build/crucible-api.zip"
 KEY="crucible-api.zip"
 CONCURRENCY="${CRUCIBLE_CONCURRENCY:-5}"
 CORS_ORIGINS="${CRUCIBLE_CORS_ORIGINS:-*}"
+if [ -z "${CRUCIBLE_CORS_ORIGINS:-}" ]; then
+  echo "==> WARNING: CRUCIBLE_CORS_ORIGINS not set — this deploy will set"
+  echo "    INTERVIEWAI_CORS_ORIGINS to '*' (any origin), replacing whatever"
+  echo "    was live before. Same whole-environment-replace hazard as auth,"
+  echo "    just lower severity. Set CRUCIBLE_CORS_ORIGINS to keep the real"
+  echo "    origin restriction on a redeploy."
+fi
 
 # Build the Lambda env as JSON (robust to empty values and URL characters that
 # break the CLI's key=value shorthand). Tavus is optional: set
@@ -149,6 +156,30 @@ aws lambda add-permission --function-name "$FN" --region "$REGION" \
 URL=$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query ApiEndpoint --output text)
 
 if [ "$AUTH_ENABLED" = "1" ]; then
+  echo "==> Smoke check: confirming the configured Cognito pool actually exists"
+  # The 401-on-missing-token check below fires before current_sub() ever
+  # contacts Cognito, so it passes identically whether the configured pool
+  # ID is correct, stale, or belongs to a different environment entirely —
+  # it proves "auth is on", not "auth is on with the right pool". Catch a
+  # typo'd or stale pool ID here instead, cheaply, via the pool's own public
+  # JWKS document.
+  JWKS_URL="https://cognito-idp.${CRUCIBLE_COGNITO_REGION:-$REGION}.amazonaws.com/${CRUCIBLE_COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+  JWKS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$JWKS_URL" 2>/dev/null || echo "000")
+  if [ "$JWKS_CODE" = "200" ]; then
+    echo "    OK — configured user pool's JWKS document is reachable"
+  else
+    echo ""
+    echo "############################################################"
+    echo "#  DEPLOY SMOKE CHECK FAILED                                #"
+    echo "#  CRUCIBLE_COGNITO_USER_POOL_ID does not resolve to a real  #"
+    echo "#  Cognito user pool (JWKS fetch returned HTTP ${JWKS_CODE}).#"
+    echo "#  This deploy would enforce auth against a pool that       #"
+    echo "#  cannot verify any real token — every login would break.  #"
+    echo "#  Check for a typo or wrong environment/region.            #"
+    echo "############################################################"
+    exit 1
+  fi
+
   echo "==> Smoke check: confirming auth is actually enforced"
   # An unauthenticated request to an auth-required endpoint must be rejected.
   # This is the direct, cheap way to catch the exact regression this script
