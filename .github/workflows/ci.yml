@@ -3,10 +3,17 @@ name: CI
 on:
   push:
     branches:
-      - "**"
+      - main
   pull_request:
     branches:
       - "**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
   backend:
@@ -19,6 +26,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/pyproject.toml
 
       - name: Install backend package with dev/test dependencies
         working-directory: backend

@@ -25,7 +25,7 @@ build-backend = "setuptools.build_meta"
 # — setuptools' auto-discovery refuses to guess among them without this,
 # so pip install -e ".[dev]" fails on a clean environment without it.
 [tool.setuptools.packages.find]
-include = ["agents*", "cli*", "config*", "data*", "evals*", "graph*", "llm*", "models*", "prompts*", "routes*", "store*"]
+include = ["agents*", "cli*", "config*", "evals*", "graph*", "llm*", "models*", "routes*", "store*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
