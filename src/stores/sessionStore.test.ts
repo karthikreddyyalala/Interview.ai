@@ -378,6 +378,129 @@ describe("sessionStore — turnError", () => {
         turnError: null,
       });
     }
+
+    it("ignores a second retryFinalize call while one is already in flight (no duplicate finalize)", async () => {
+      seedWrappingWithError();
+      const { api } = await import("@/lib/api");
+      let resolveCall!: (v: MemoryProfile) => void;
+      vi.mocked(api.finalizeSession).mockReturnValueOnce(
+        new Promise<MemoryProfile>((r) => { resolveCall = r; })
+      );
+
+      // Two near-simultaneous clicks of the RETRY button — the backend's
+      // finalize is not idempotent for duplicate identical calls (it re-runs
+      // the Memory Agent merge and writes each time), so a second in-flight
+      // call must be a no-op, not a second network request.
+      const first = useSessionStore.getState().retryFinalize();
+      const second = useSessionStore.getState().retryFinalize();
+
+      resolveCall(MOCK_MEMORY);
+      await Promise.all([first, second]);
+
+      expect(api.finalizeSession).toHaveBeenCalledTimes(1);
+      expect(useSessionStore.getState().status).toBe("complete");
+    });
+
+    it("exposes a finalizing flag that is true only while the call is in flight", async () => {
+      seedWrappingWithError();
+      const { api } = await import("@/lib/api");
+      let resolveCall!: (v: MemoryProfile) => void;
+      vi.mocked(api.finalizeSession).mockReturnValueOnce(
+        new Promise<MemoryProfile>((r) => { resolveCall = r; })
+      );
+
+      expect(useSessionStore.getState().finalizing).toBe(false);
+      const promise = useSessionStore.getState().retryFinalize();
+      expect(useSessionStore.getState().finalizing).toBe(true);
+
+      resolveCall(MOCK_MEMORY);
+      await promise;
+
+      expect(useSessionStore.getState().finalizing).toBe(false);
+    });
+  });
+
+  describe("persistence — a failed finalize must not look like a successful one after reload", () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    function readPersisted(): { state: Record<string, unknown> } {
+      const raw = localStorage.getItem("crucible.session.v1");
+      expect(raw).not.toBeNull();
+      return JSON.parse(raw!);
+    }
+
+    it("does not persist status as 'complete' when wrapping ended in a finalize error", async () => {
+      useSessionStore.setState({
+        status: "live",
+        role: "sde",
+        mode: "full",
+        level: "mid",
+        profile: null,
+        plan: MOCK_PLAN,
+        currentIdx: 1,
+        followUpCount: 0,
+        messages: [],
+        evaluations: [],
+        priorMemory: null,
+        updatedMemory: null,
+        justRestored: false,
+        turnError: null,
+      });
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.submitAnswer).mockResolvedValueOnce({
+        decision: COMPLETE_DECISION,
+        evaluation: MOCK_EVALUATION,
+      });
+      vi.mocked(api.finalizeSession).mockRejectedValueOnce(new Error("Request failed (503)"));
+
+      await useSessionStore.getState().submitAnswer("My final answer.");
+
+      // Sanity: the in-memory store is in the expected failed-wrapping state.
+      expect(useSessionStore.getState().status).toBe("wrapping");
+      expect(useSessionStore.getState().turnError).toBe("Request failed (503)");
+
+      // The bug: partialize unconditionally remaps "wrapping" -> "complete"
+      // on every write, and never persists turnError — so a reload after a
+      // failed finalize would rehydrate as a normal completed session (the
+      // "status === complete" effect fires and navigates to /results) with
+      // no error and no way to retry. That's silently WRONG, not just stuck.
+      const persisted = readPersisted();
+      expect(persisted.state.status).not.toBe("complete");
+      expect(persisted.state.turnError).toBe("Request failed (503)");
+    });
+
+    it("still persists status as 'complete' when finalize actually succeeded", async () => {
+      useSessionStore.setState({
+        status: "live",
+        role: "sde",
+        mode: "full",
+        level: "mid",
+        profile: null,
+        plan: MOCK_PLAN,
+        currentIdx: 1,
+        followUpCount: 0,
+        messages: [],
+        evaluations: [],
+        priorMemory: null,
+        updatedMemory: null,
+        justRestored: false,
+        turnError: null,
+      });
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.submitAnswer).mockResolvedValueOnce({
+        decision: COMPLETE_DECISION,
+        evaluation: MOCK_EVALUATION,
+      });
+      vi.mocked(api.finalizeSession).mockResolvedValueOnce(MOCK_MEMORY);
+
+      await useSessionStore.getState().submitAnswer("My final answer.");
+
+      expect(useSessionStore.getState().status).toBe("complete");
+      const persisted = readPersisted();
+      expect(persisted.state.status).toBe("complete");
+    });
   });
 
   describe("warm-up exchange", () => {
@@ -421,6 +544,48 @@ describe("sessionStore — turnError", () => {
       const candidateMsgs = useSessionStore.getState().messages.filter((m) => m.speaker === "candidate");
       expect(candidateMsgs).toHaveLength(1);
       expect(candidateMsgs[0].questionId).toBe("intro");
+    });
+  });
+
+  describe("start — clears stale finalize-error state from a prior session", () => {
+    // turnError (and now finalizing) are persisted to localStorage as of the
+    // finalize-error fix above. Without resetting them here, a leftover
+    // "Request failed (503)" from a previous session's failed finalize would
+    // otherwise bleed into the error banner of a brand-new session.
+    it("resets turnError and finalizing when starting a new session", async () => {
+      useSessionStore.setState({ turnError: "stale finalize error", finalizing: true });
+      const { api } = await import("@/lib/api");
+      vi.mocked(api.getMemory).mockResolvedValue({
+        candidateId: "test-candidate-id",
+        recurringWeaknesses: [],
+        improvementTrend: [],
+        strongAreas: [],
+      });
+      vi.mocked(api.startSession).mockResolvedValueOnce({
+        profile: {
+          candidateSkills: [],
+          yearsExperience: 3,
+          projectHighlights: [],
+          targetRole: "sde",
+          jdRequirements: [],
+          resumeToJdGaps: [],
+        },
+        plan: MOCK_PLAN,
+      });
+
+      await useSessionStore.getState().start({
+        resumeText: "resume",
+        jdText: "jd",
+        role: "sde",
+        mode: "full",
+        level: "mid",
+        candidateName: "Karthik",
+        useVideo: false,
+      });
+
+      const s = useSessionStore.getState();
+      expect(s.turnError).toBeNull();
+      expect(s.finalizing).toBe(false);
     });
   });
 });

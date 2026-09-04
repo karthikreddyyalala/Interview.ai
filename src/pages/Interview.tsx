@@ -38,6 +38,7 @@ export function Interview() {
   const turnError = useSessionStore((s) => s.turnError);
   const clearTurnError = useSessionStore((s) => s.clearTurnError);
   const retryFinalize = useSessionStore((s) => s.retryFinalize);
+  const finalizing = useSessionStore((s) => s.finalizing);
 
   const [draft, setDraft] = useState("");
   const [lastDraft, setLastDraft] = useState("");
@@ -328,10 +329,11 @@ export function Interview() {
                   if (status === "wrapping") retryFinalize();
                   else clearTurnError();
                 }}
-                className="flex items-center gap-1.5 font-mono text-[11px] text-fog transition-colors hover:text-chalk"
+                disabled={status === "wrapping" && finalizing}
+                className="flex items-center gap-1.5 font-mono text-[11px] text-fog transition-colors hover:text-chalk disabled:opacity-40"
               >
                 <ArrowClockwise size={13} weight="bold" />
-                RETRY
+                {status === "wrapping" && finalizing ? "RETRYING…" : "RETRY"}
               </button>
             </div>
           </motion.div>

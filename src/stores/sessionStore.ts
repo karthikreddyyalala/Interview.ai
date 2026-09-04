@@ -47,6 +47,11 @@ interface SessionState {
   updatedMemory: MemoryProfile | null;
   justRestored: boolean;
   turnError: string | null;
+  // True for the duration of a finalizeSession call (initial or retry). The
+  // backend's finalize isn't idempotent for duplicate identical calls — each
+  // one independently re-runs the Memory Agent merge and writes — so this
+  // guards against a double-click firing two concurrent finalize requests.
+  finalizing: boolean;
 
   loadMemory: () => Promise<void>;
   start: (input: {
@@ -119,6 +124,10 @@ export const useSessionStore = create<SessionState>()(
       // failures already are (turnError + a way to retry) instead of leaving
       // the session stuck on "wrapping" with no feedback.
       const runFinalize = async () => {
+        // In-flight guard: a duplicate call (e.g. a double-click on RETRY)
+        // must be a no-op, not a second concurrent finalize request.
+        if (get().finalizing) return;
+        set({ finalizing: true });
         const state = get();
         try {
           const updated = await api.finalizeSession({
@@ -129,10 +138,11 @@ export const useSessionStore = create<SessionState>()(
             level: state.level,
             questions: state.plan!.questions,
           });
-          set({ status: "complete", updatedMemory: updated, turnError: null });
+          set({ status: "complete", updatedMemory: updated, turnError: null, finalizing: false });
         } catch (e) {
           set({
             turnError: e instanceof Error ? e.message : "Request failed — please try again.",
+            finalizing: false,
           });
         }
       };
@@ -155,6 +165,7 @@ export const useSessionStore = create<SessionState>()(
       updatedMemory: null,
       justRestored: false,
       turnError: null,
+      finalizing: false,
 
       loadMemory: async () => {
         const memory = await api.getMemory(getCandidateId());
@@ -165,6 +176,10 @@ export const useSessionStore = create<SessionState>()(
         set({
           status: "starting", role, mode, level, candidateName, useVideo,
           warmup: false, messages: [], evaluations: [], updatedMemory: null,
+          // A leftover finalize error/in-flight flag from a prior session
+          // (now persisted, see the partialize comment below) must not
+          // bleed into a brand-new session's UI.
+          turnError: null, finalizing: false,
         });
         try {
         const candidateId = getCandidateId();
@@ -338,7 +353,7 @@ export const useSessionStore = create<SessionState>()(
       },
 
       retryFinalize: async () => {
-        if (get().status !== "wrapping") return;
+        if (get().status !== "wrapping" || get().finalizing) return;
         set({ turnError: null });
         await runFinalize();
       },
@@ -358,6 +373,8 @@ export const useSessionStore = create<SessionState>()(
           evaluations: [],
           updatedMemory: null,
           justRestored: false,
+          turnError: null,
+          finalizing: false,
         }),
       };
     },
@@ -367,12 +384,17 @@ export const useSessionStore = create<SessionState>()(
       // Persist only session data, never the action fns. Transient statuses
       // are corrected at save time: a reload during "thinking" (request in
       // flight, now lost) resumes as "live" so the answer can be resubmitted;
-      // "starting" (no plan yet) falls back to "idle".
+      // "starting" (no plan yet) falls back to "idle". "wrapping" is assumed
+      // to have finished by the time of reload and resumes as "complete" —
+      // UNLESS it ended in an unresolved finalize error (turnError set), in
+      // which case that would be lying about a failed finalize looking
+      // successful (silently wrong, not just stuck) — so it stays "wrapping"
+      // and turnError is persisted alongside it so the retry UI reappears.
       partialize: (s) => ({
         status:
           s.status === "thinking" ? "live"
           : s.status === "starting" ? "idle"
-          : s.status === "wrapping" ? "complete"
+          : s.status === "wrapping" && !s.turnError ? "complete"
           : s.status,
         role: s.role,
         mode: s.mode,
@@ -388,6 +410,7 @@ export const useSessionStore = create<SessionState>()(
         evaluations: s.evaluations,
         priorMemory: s.priorMemory,
         updatedMemory: s.updatedMemory,
+        turnError: s.turnError,
       }),
       onRehydrateStorage: () => (state) => {
         // Flag a mid-interview resume so the UI can acknowledge it.
