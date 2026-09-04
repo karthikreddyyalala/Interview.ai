@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { KokoroTTS } from "kokoro-js";
 
 export type KokoroStatus = "idle" | "loading" | "ready" | "error";
 
@@ -9,8 +10,7 @@ export function useKokoroTTS() {
   const [status, setStatus] = useState<KokoroStatus>("idle");
   const [speaking, setSpeaking] = useState(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ttsRef = useRef<any>(null);
+  const ttsRef = useRef<KokoroTTS | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
@@ -49,7 +49,7 @@ export function useKokoroTTS() {
         const result = await ttsRef.current.generate(text, { voice: "af_heart" });
         const ctx = (audioCtxRef.current ??= new AudioContext());
         const buf = ctx.createBuffer(1, result.audio.length, result.sampling_rate);
-        buf.copyToChannel(result.audio, 0);
+        buf.copyToChannel(new Float32Array(result.audio), 0);
         const src = ctx.createBufferSource();
         sourceRef.current = src;
         src.buffer = buf;

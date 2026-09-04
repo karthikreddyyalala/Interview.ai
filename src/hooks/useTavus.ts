@@ -1,4 +1,9 @@
 import { useCallback, useRef, useState } from "react";
+import type {
+  DailyCall,
+  DailyEventObjectAppMessage,
+  DailyEventObjectTrack,
+} from "@daily-co/daily-js";
 import { api } from "@/lib/api";
 
 // Drives an optional Tavus video-avatar layer. It stays completely dormant
@@ -18,7 +23,7 @@ export function useTavus() {
   const [speaking, setSpeaking] = useState(false);
   const [videoTrack, setVideoTrack] = useState<MediaStreamTrack | null>(null);
 
-  const callRef = useRef<any>(null);
+  const callRef = useRef<DailyCall | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
 
@@ -41,7 +46,7 @@ export function useTavus() {
       // With createCallObject() nothing plays automatically — we render the
       // replica's video ourselves AND must play its audio ourselves, or it's
       // silent. Grab both tracks; audio goes straight to an <audio> sink.
-      const onTrack = (ev: any) => {
+      const onTrack = (ev: DailyEventObjectTrack) => {
         if (ev.participant?.local) return;
         if (ev?.track?.kind === "video") {
           setVideoTrack(ev.track as MediaStreamTrack);
@@ -53,7 +58,7 @@ export function useTavus() {
         }
       };
       // Mirror the avatar's speaking state onto the UI for lip-sync cues.
-      const onAppMessage = (ev: any) => {
+      const onAppMessage = (ev: DailyEventObjectAppMessage) => {
         const t = ev?.data?.event_type;
         if (t === "conversation.replica.started_speaking") setSpeaking(true);
         if (t === "conversation.replica.stopped_speaking") setSpeaking(false);
