@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle, WarningOctagon, CaretDown, Sparkle, ArrowClockwise } from "@phosphor-icons/react";
-import type { AnswerEvaluation, CoachResponse, PlannedQuestion } from "@/types/contracts";
-import { api } from "@/lib/api";
+import type { AnswerEvaluation, PlannedQuestion } from "@/types/contracts";
+import { useCoach } from "@/hooks/useCoach";
 import { RubricBar } from "./RubricBar";
 import { TypeChip } from "./QuestionMeta";
 
@@ -228,11 +228,6 @@ function TabButton({
   );
 }
 
-type CoachState =
-  | { phase: "loading" }
-  | { phase: "error" }
-  | { phase: "ready"; data: CoachResponse };
-
 // Isolated so its fetch/loading lives on its own and only runs when the user
 // asks to see the model answer. Mounts once, caches the result.
 function CoachPanel({
@@ -244,19 +239,7 @@ function CoachPanel({
   transcript: string;
   weaknessTags: string[];
 }) {
-  const [state, setState] = useState<CoachState>({ phase: "loading" });
-
-  const load = () => {
-    setState({ phase: "loading" });
-    let cancelled = false;
-    api
-      .coachAnswer({ question, transcript, weaknessTags })
-      .then((data) => !cancelled && setState({ phase: "ready", data }))
-      .catch(() => !cancelled && setState({ phase: "error" }));
-    return () => {
-      cancelled = true;
-    };
-  };
+  const { state, load } = useCoach({ question, transcript, weaknessTags });
 
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 
