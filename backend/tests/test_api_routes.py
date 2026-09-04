@@ -194,6 +194,124 @@ def test_finalize_persists_memory_to_store():
     assert saved.recurring_weaknesses[0].tag == "no-edge-cases"
 
 
+class _RacingStoreOnce(InMemoryStore):
+    """Wraps InMemoryStore to inject exactly one concurrent write right after
+    the first get_memory_with_version() call, simulating a second finalize
+    request for the same candidate that completes in the gap between our
+    read and our write (two browser tabs, or a retried request that already
+    succeeded server-side)."""
+
+    def __init__(self, race_profile):
+        super().__init__()
+        self._race_profile = race_profile
+        self._raced = False
+
+    def get_memory_with_version(self, candidate_id):
+        result = super().get_memory_with_version(candidate_id)
+        if not self._raced:
+            self._raced = True
+            super().put_memory(self._race_profile)
+        return result
+
+
+class _AlwaysRacingStore(InMemoryStore):
+    """Every read is immediately followed by a concurrent write, so every
+    put_memory_cas attempt is guaranteed to conflict — used to prove the
+    retry loop is bounded rather than infinite."""
+
+    def __init__(self, race_profile):
+        super().__init__()
+        self._race_profile = race_profile
+
+    def get_memory_with_version(self, candidate_id):
+        result = super().get_memory_with_version(candidate_id)
+        super().put_memory(self._race_profile)
+        return result
+
+
+class _CountingMemoryLLM(_FakeLLM):
+    """Like _FakeLLM but records the `user` prompt passed to every
+    MemoryProfile (Memory Agent) call, so tests can assert both how many
+    times the (expensive, LLM-backed) recompute ran and what state it saw."""
+
+    def __init__(self, payloads: dict):
+        super().__init__(payloads)
+        self.memory_calls: list[str] = []
+
+    def structured(self, *, model, system, user, schema, max_tokens=2000):
+        if schema.__name__ == "MemoryProfile":
+            self.memory_calls.append(user)
+        return super().structured(model=model, system=system, user=user, schema=schema, max_tokens=max_tokens)
+
+
+def test_finalize_retries_after_one_conflict_and_does_not_lose_data():
+    """The core fix: a version conflict on put_memory must not be swallowed
+    or clobber the concurrent write. finalize should re-read fresh state,
+    re-run the Memory Agent against it, and succeed on retry."""
+    from models.contracts import MemoryProfile
+
+    race_profile = MemoryProfile.model_validate(
+        {
+            "candidateId": "cand-race",
+            "recurringWeaknesses": [{"tag": "concurrent-writer-tag", "frequency": 1, "lastSeen": "2026-08-01"}],
+            "improvementTrend": [],
+            "strongAreas": [],
+        }
+    )
+    store = _RacingStoreOnce(race_profile)
+    llm = _CountingMemoryLLM({"MemoryProfile": {**_MEMORY, "candidateId": "cand-race"}})
+    app = create_app(llm=llm, store=store)
+    client = TestClient(app)
+
+    res = client.post(
+        "/api/session/finalize",
+        json={"candidateId": "cand-race", "evaluations": [_EVAL]},
+    )
+    assert res.status_code == 200
+
+    # The Memory Agent had to be re-run against fresh state after the
+    # conflict — this is the deliberate design decision (the "modify" step
+    # genuinely depends on the post-race state), not an accident.
+    assert len(llm.memory_calls) == 2
+    assert "concurrent-writer-tag" not in llm.memory_calls[0]
+    assert "concurrent-writer-tag" in llm.memory_calls[1]
+
+    # Final state is the second (post-conflict) computation's result, not a
+    # silent no-op and not the race profile alone.
+    saved = store.get_memory("cand-race")
+    assert saved is not None
+    assert saved.recurring_weaknesses[0].tag == "no-edge-cases"
+
+
+def test_finalize_gives_up_loudly_after_exhausting_retries():
+    """If conflicts keep happening past the bound, finalize must fail loudly
+    (surface as an error) rather than silently drop the update or loop
+    forever."""
+    from models.contracts import MemoryProfile
+
+    race_profile = MemoryProfile.model_validate(
+        {
+            "candidateId": "cand-hammered",
+            "recurringWeaknesses": [],
+            "improvementTrend": [],
+            "strongAreas": [],
+        }
+    )
+    store = _AlwaysRacingStore(race_profile)
+    llm = _CountingMemoryLLM({"MemoryProfile": {**_MEMORY, "candidateId": "cand-hammered"}})
+    app = create_app(llm=llm, store=store)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    res = client.post(
+        "/api/session/finalize",
+        json={"candidateId": "cand-hammered", "evaluations": [_EVAL]},
+    )
+
+    assert res.status_code == 503  # clean, readable, retryable — not a hang or a 500 stack trace
+    # Bounded: a small, explicit number of attempts, not infinite.
+    assert 1 < len(llm.memory_calls) <= 5
+
+
 def test_get_memory_returns_persisted_profile():
     store = InMemoryStore()
     client = _client({"MemoryProfile": {**_MEMORY, "candidateId": "cand-abc"}}, store=store)

@@ -26,7 +26,7 @@ from agents.evaluator import EvaluatorAgent
 from agents.interviewer import InterviewerAgent
 from agents.memory import MemoryAgent
 from graph.session_start import build_session_start_graph
-from store.base import MemoryStore
+from store.base import MemoryStore, VersionConflict
 
 
 class _Base(BaseModel):
@@ -78,6 +78,23 @@ class CoachRequest(_Base):
 
 class AvatarEndRequest(_Base):
     conversation_id: str
+
+
+# finalize's memory update is a classic read-modify-write around an LLM call
+# (the Memory Agent): two finalize calls for the same candidate racing (two
+# tabs, or a client retry after a slow-but-actually-successful request) must
+# not silently clobber each other. The store detects the race via optimistic
+# locking (put_memory_cas raises VersionConflict); this constant bounds how
+# many times we re-read + re-run the Memory Agent + retry the write.
+#
+# The retry deliberately re-runs the LLM call, not just the write: the
+# "modify" step's whole job is to merge the new evaluations into whatever
+# memory currently exists, so after a conflict it must recompute against the
+# post-race state, not resubmit a merge decision that used stale input.
+# Contention is expected to be rare (same candidate, same few seconds), not
+# adversarial, so a small bound is proportionate — it exists to fail loudly
+# on a genuine bug, not to survive hammering.
+_MAX_MEMORY_FINALIZE_ATTEMPTS = 3
 
 
 def _empty_memory(candidate_id: str) -> MemoryProfile:
@@ -190,14 +207,24 @@ def build_session_router(*, llm, settings: Settings, store: MemoryStore, tavus_c
     def finalize(req: FinalizeRequest, sub: str | None = Depends(current_sub)) -> MemoryProfile:
         cid = sub or req.candidate_id
         today = date.today().isoformat()
-        existing = store.get_memory(cid) or _empty_memory(cid)
-        updated = memory_agent.run(
-            candidate_id=cid,
-            session_date=today,
-            evaluations=req.evaluations,
-            existing_memory=existing,
-        )
-        store.put_memory(updated)
+
+        updated: MemoryProfile | None = None
+        for attempt in range(_MAX_MEMORY_FINALIZE_ATTEMPTS):
+            existing, version = store.get_memory_with_version(cid)
+            existing = existing or _empty_memory(cid)
+            updated = memory_agent.run(
+                candidate_id=cid,
+                session_date=today,
+                evaluations=req.evaluations,
+                existing_memory=existing,
+            )
+            try:
+                store.put_memory_cas(updated, expected_version=version)
+                break
+            except VersionConflict:
+                if attempt == _MAX_MEMORY_FINALIZE_ATTEMPTS - 1:
+                    raise
+                continue
 
         # Persist a reviewable record of this session when the client sent the
         # session id + questions (newer clients). Older payloads just update
