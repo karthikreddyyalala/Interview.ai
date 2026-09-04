@@ -19,15 +19,40 @@ API_BASE="${CRUCIBLE_API_BASE:?Set CRUCIBLE_API_BASE to the Lambda Function URL}
 
 echo "==> Building frontend against ${API_BASE}"
 cd "$ROOT"
-# Cognito is optional the same way it is on the backend: set
+# Cognito is a live access-control boundary, not a cosmetic feature: set
 # CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID in your OWN
 # shell (never commit these) so the built bundle can sign users in. Leaving
 # them unset silently ships a build with login disabled (AUTH_CONFIGURED
-# is false in src/lib/auth.ts), so warn rather than fail silently.
+# is false in src/lib/auth.ts), which the app itself never flags — so this
+# hard-fails by default. To build WITHOUT auth on purpose, set
+# CRUCIBLE_COGNITO_CONFIRM_DISABLE=1.
 if [ -n "${CRUCIBLE_COGNITO_USER_POOL_ID:-}" ] && [ -n "${CRUCIBLE_COGNITO_CLIENT_ID:-}" ]; then
   echo "==> Cognito auth: ENABLED (user pool + client id provided)"
+elif [ "${CRUCIBLE_COGNITO_CONFIRM_DISABLE:-}" = "1" ]; then
+  echo ""
+  echo "############################################################"
+  echo "#  WARNING: BUILDING WITH COGNITO LOGIN DISABLED            #"
+  echo "#  CRUCIBLE_COGNITO_CONFIRM_DISABLE=1 is set. This build    #"
+  echo "#  will ship with no working sign-in (AUTH_CONFIGURED       #"
+  echo "#  false). Proceed only if you intend that for this deploy. #"
+  echo "############################################################"
+  echo ""
 else
-  echo "==> Cognito auth: DISABLED — set CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID to enable login"
+  {
+    echo ""
+    echo "ERROR: CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID are"
+    echo "not both set."
+    echo ""
+    echo "The built bundle bakes these in at build time (src/lib/auth.ts). Running"
+    echo "this now would SILENTLY SHIP a build where login is disabled, with no"
+    echo "runtime warning — AUTH_CONFIGURED just becomes false."
+    echo ""
+    echo "Fix: export CRUCIBLE_COGNITO_USER_POOL_ID and CRUCIBLE_COGNITO_CLIENT_ID"
+    echo "in this shell before running this script."
+    echo ""
+    echo "To build WITHOUT auth deliberately, set CRUCIBLE_COGNITO_CONFIRM_DISABLE=1."
+  } >&2
+  exit 1
 fi
 VITE_USE_MOCK=false VITE_API_BASE="$API_BASE" \
   VITE_COGNITO_USER_POOL_ID="${CRUCIBLE_COGNITO_USER_POOL_ID:-}" \
