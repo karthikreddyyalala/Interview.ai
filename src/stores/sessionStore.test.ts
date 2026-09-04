@@ -548,8 +548,9 @@ describe("sessionStore — turnError", () => {
   });
 
   describe("start — clears stale finalize-error state from a prior session", () => {
-    // turnError (and now finalizing) are persisted to localStorage as of the
-    // finalize-error fix above. Without resetting them here, a leftover
+    // turnError is persisted to localStorage as of the finalize-error fix
+    // above (finalizing is not persisted, always rehydrates false). Without
+    // resetting turnError here, a leftover
     // "Request failed (503)" from a previous session's failed finalize would
     // otherwise bleed into the error banner of a brand-new session.
     it("resets turnError and finalizing when starting a new session", async () => {

@@ -176,9 +176,11 @@ export const useSessionStore = create<SessionState>()(
         set({
           status: "starting", role, mode, level, candidateName, useVideo,
           warmup: false, messages: [], evaluations: [], updatedMemory: null,
-          // A leftover finalize error/in-flight flag from a prior session
-          // (now persisted, see the partialize comment below) must not
-          // bleed into a brand-new session's UI.
+          // A leftover finalize error from a prior session (turnError is
+          // persisted, see the partialize comment below) must not bleed
+          // into a brand-new session's UI. finalizing itself always
+          // rehydrates to false (it's not persisted), so clearing it here
+          // is just defensive symmetry with turnError.
           turnError: null, finalizing: false,
         });
         try {
