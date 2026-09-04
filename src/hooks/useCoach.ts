@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "@/lib/api";
 import type { CoachResponse, PlannedQuestion } from "@/types/contracts";
 
@@ -19,21 +19,30 @@ export function useCoach(input: {
   weaknessTags: string[];
 }) {
   const [state, setState] = useState<CoachState>({ phase: "loading" });
-  const cancelledRef = useRef(false);
 
+  // Each call to `load()` gets its OWN `cancelled` flag, scoped to that call's
+  // closure — not a single ref shared/reset across calls. That per-call
+  // isolation matters under StrictMode, which double-invokes
+  // `useEffect(load, [])` in dev: mount -> load() #1 fires request A ->
+  // cleanup calls #1's returned canceller (its own `cancelled` flips true)
+  // -> mount again -> load() #2 fires request B with its own independent
+  // flag. If a shared ref were reset to false at the top of #2, #1's
+  // cancellation would be silently undone and a stale response from A could
+  // overwrite B's result.
   const load = useCallback(() => {
-    cancelledRef.current = false;
     setState({ phase: "loading" });
+    let cancelled = false;
     api
       .coachAnswer(input)
       .then((data) => {
-        if (!cancelledRef.current) setState({ phase: "ready", data });
+        if (!cancelled) setState({ phase: "ready", data });
       })
-      .catch(() => {
-        if (!cancelledRef.current) setState({ phase: "error" });
+      .catch((err) => {
+        console.error("[useCoach] coachAnswer failed:", err);
+        if (!cancelled) setState({ phase: "error" });
       });
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input.question, input.transcript, input.weaknessTags]);
