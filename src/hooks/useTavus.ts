@@ -49,7 +49,7 @@ export function useTavus() {
       const onTrack = (ev: DailyEventObjectTrack) => {
         if (ev.participant?.local) return;
         if (ev?.track?.kind === "video") {
-          setVideoTrack(ev.track as MediaStreamTrack);
+          setVideoTrack(ev.track);
         } else if (ev?.track?.kind === "audio") {
           const el = (audioElRef.current ??= new Audio());
           el.srcObject = new MediaStream([ev.track]);
@@ -58,7 +58,7 @@ export function useTavus() {
         }
       };
       // Mirror the avatar's speaking state onto the UI for lip-sync cues.
-      const onAppMessage = (ev: DailyEventObjectAppMessage) => {
+      const onAppMessage = (ev: DailyEventObjectAppMessage<{ event_type?: string }>) => {
         const t = ev?.data?.event_type;
         if (t === "conversation.replica.started_speaking") setSpeaking(true);
         if (t === "conversation.replica.stopped_speaking") setSpeaking(false);
