@@ -14,7 +14,7 @@ rm -rf "$BUILD"
 mkdir -p "$PKG"
 
 echo "==> Fetching Linux (manylinux2014 x86_64) deps for python3.12"
-python -m pip install \
+python3 -m pip install \
   --platform manylinux2014_x86_64 \
   --python-version 3.12 \
   --implementation cp \
